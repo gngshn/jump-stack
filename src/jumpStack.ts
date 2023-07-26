@@ -70,7 +70,7 @@ class Position {
       return;
     }
     if (this.cursor.isAfter(range.start)) {
-      this.cursor.with(this.cursor.line + lineDiff);
+      this.cursor = this.cursor.translate(lineDiff);
     }
   }
 
