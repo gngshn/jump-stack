@@ -2,7 +2,7 @@
     "name": "jump-stack",
     "displayName": "jump-stack",
     "description": "jump-stack for code jump. You can do any commands after push current jump position",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "publisher": "gngshn",
     "icon": "jump-stack.png",
     "repository": {

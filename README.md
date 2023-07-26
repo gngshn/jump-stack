@@ -54,21 +54,21 @@ A more advanced config can be:
 ```json
 {
   "command": "extension.jump-stack.pushPositionDoCommands",
-  "key": "somekey",
+  "key": "hotkey",
   "args": {
     "commands": [
       {
-        "command": "vscode.s.command0",
+        "command": "vscodecommand0",
         "args": {
-          "args0": "xxx",
-          "args1": "xxx"
+          "args00": "args00-value",
+          "args01": "args01-value"
         }
       },
       {
-        "command": "vscode.s.command1",
+        "command": "vscodecommand1",
         "args": {
-          "args0": "xxx",
-          "args1": "xxx"
+          "args10": "args10-value",
+          "args11": "args11-value"
         }
       }
     ],

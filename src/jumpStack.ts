@@ -10,7 +10,7 @@ interface Command {
   args: CommandArg[];
 }
 
-interface JumpStackCmdArgs {
+interface PushDoCommandsArgs {
   commands?: (string | Command)[];
   checkPosition?: boolean;
 }
@@ -39,15 +39,15 @@ class Stack<T> {
     return this.storage.length;
   }
 
-  filterStorage(predicate: (value: T, index: number) => boolean): T[] {
-    return this.storage.filter(predicate);
+  forEach(callbackfn: (value: T, index: number) => void) {
+    this.storage.forEach(callbackfn);
   }
 }
 
 class Position {
-  filename: string;
-  viewColumn: vscode.ViewColumn;
-  cursor: vscode.Position;
+  private filename: string;
+  private viewColumn: vscode.ViewColumn;
+  private cursor: vscode.Position;
 
   constructor(editor: vscode.TextEditor) {
     this.filename = editor.document.fileName;
@@ -57,16 +57,24 @@ class Position {
     this.cursor = editor.selection.active;
   }
 
-  cursorSame(editor: vscode.TextEditor): boolean {
+  isSamePosition(editor: vscode.TextEditor): boolean {
     return (
       this.filename === editor.document.fileName &&
       this.viewColumn === editor.viewColumn &&
-      this.cursor.line === editor.selection.active.line &&
-      this.cursor.character === editor.selection.active.character
+      this.cursor.isEqual(editor.selection.active)
     );
   }
 
-  getTargetViewColumn(): vscode.ViewColumn {
+  fixPosition(filename: string, range: vscode.Range, lineDiff: number) {
+    if (filename !== this.filename) {
+      return;
+    }
+    if (this.cursor.isAfter(range.start)) {
+      this.cursor.with(this.cursor.line + lineDiff);
+    }
+  }
+
+  targetViewColumn(): vscode.ViewColumn {
     let first;
     let second;
 
@@ -88,7 +96,10 @@ class Position {
       this.viewColumn !== editor?.viewColumn
     ) {
       let doc = await vscode.workspace.openTextDocument(this.filename);
-      editor = await vscode.window.showTextDocument(doc, this.getTargetViewColumn());
+      editor = await vscode.window.showTextDocument(
+        doc,
+        this.targetViewColumn()
+      );
     }
     editor.selection = new vscode.Selection(this.cursor, this.cursor);
     editor.revealRange(
@@ -121,7 +132,7 @@ export default class JumpStack {
       return;
     }
 
-    if (!position.cursorSame(editor)) {
+    if (!position.isSamePosition(editor)) {
       this.positionStack.push(new Position(editor));
     }
   }
@@ -131,7 +142,7 @@ export default class JumpStack {
     await position?.jump();
   }
 
-  async pushPositionDoCommands(args?: JumpStackCmdArgs) {
+  async pushPositionDoCommands(args?: PushDoCommandsArgs) {
     if (!args || !args.commands || !Array.isArray(args.commands)) {
       this.pushPosition();
       return;
@@ -152,7 +163,7 @@ export default class JumpStack {
       if (!position || !editor) {
         return;
       }
-      if (position.cursorSame(editor)) {
+      if (position.isSamePosition(editor)) {
         this.popPosition();
       }
     }
@@ -161,16 +172,12 @@ export default class JumpStack {
   fixJumpStack(textChangeEvent: vscode.TextDocumentChangeEvent) {
     const doc = textChangeEvent.document;
     textChangeEvent.contentChanges.forEach((change) => {
-      let newLineNum = change.text.split("\n").length - 1;
-      let oldLineNum = change.range.end.line - change.range.start.line;
-      let diff = newLineNum - oldLineNum;
-
-      this.positionStack
-        .filterStorage((position) => position.filename === doc.fileName)
-        .filter((position) => change.range.start.line < position.cursor.line)
-        .forEach((position) => {
-          position.cursor = position.cursor.with(position.cursor.line + diff);
-        });
+      let newLineNum = change.text.split("\n").length;
+      let oldLineNum = change.range.end.line - change.range.start.line + 1;
+      let lineDiff = newLineNum - oldLineNum;
+      this.positionStack.forEach((position) =>
+        position.fixPosition(doc.fileName, change.range, lineDiff)
+      );
     });
   }
 }
