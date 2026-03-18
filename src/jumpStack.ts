@@ -12,7 +12,7 @@ interface Command {
 
 interface PushDoCommandsArgs {
   commands?: (string | Command)[];
-  checkPosition?: boolean;
+  checkTimeout?: number;
 }
 
 class Stack<T> {
@@ -57,12 +57,23 @@ class Position {
     this.cursor = editor.selection.active;
   }
 
-  isSamePosition(editor: vscode.TextEditor): boolean {
-    return (
-      this.filename === editor.document.fileName &&
-      this.viewColumn === editor.viewColumn &&
-      this.cursor.isEqual(editor.selection.active)
-    );
+  isSamePosition(editor: vscode.TextEditor | undefined): boolean {
+    if (!editor) {
+      return false;
+    }
+    let document = editor.document;
+    if (
+      this.filename !== document.fileName ||
+      this.viewColumn !== editor.viewColumn
+    ) {
+      return false;
+    }
+    let range1 = document.getWordRangeAtPosition(this.cursor);
+    let range2 = document.getWordRangeAtPosition(editor.selection.active);
+    if (!range1 || !range2) {
+      return false;
+    }
+    return range1.isEqual(range2);
   }
 
   fixPosition(filename: string, range: vscode.Range, lineDiff: number) {
@@ -98,73 +109,90 @@ class Position {
       let doc = await vscode.workspace.openTextDocument(this.filename);
       editor = await vscode.window.showTextDocument(
         doc,
-        this.targetViewColumn()
+        this.targetViewColumn(),
       );
     }
     editor.selection = new vscode.Selection(this.cursor, this.cursor);
     editor.revealRange(
       new vscode.Range(this.cursor, this.cursor),
-      vscode.TextEditorRevealType.InCenterIfOutsideViewport
+      vscode.TextEditorRevealType.InCenterIfOutsideViewport,
     );
   }
 }
 
 export default class JumpStack {
-  positionStack: Stack<Position>;
-  hasPushed: boolean;
+  private positionStack: Stack<Position>;
+  private hasPushed: boolean = false;
+  private wasPeekViewOpen: boolean = false;
+  private checkTimer: NodeJS.Timeout | null = null;
+  private checkTimeout: number;
+  private defaultCheckTimeout: number = 500;
 
   constructor() {
     this.positionStack = new Stack();
-    this.hasPushed = false;
+    this.checkTimeout = this.defaultCheckTimeout;
   }
 
   pushPosition() {
     let editor = vscode.window.activeTextEditor;
-    if (!editor) {
+    let position = this.positionStack.peek();
+
+    if (!editor || position?.isSamePosition(editor)) {
       this.hasPushed = false;
       return;
     }
-
-    let position = this.positionStack.peek();
-    if (!position) {
-      this.positionStack.push(new Position(editor));
-      this.hasPushed = true;
-      return;
-    }
-
-    if (!position.isSamePosition(editor)) {
-      this.positionStack.push(new Position(editor));
-    }
+    this.stopCheckTimer();
+    this.positionStack.push(new Position(editor));
+    this.hasPushed = true;
   }
 
   async popPosition() {
+    this.stopCheckTimer();
     let position = this.positionStack.pop();
     await position?.jump();
   }
 
+  checkDropPosition() {
+    let position = this.positionStack.peek();
+    let editor = vscode.window.activeTextEditor;
+
+    if (position?.isSamePosition(editor)) {
+      this.positionStack.pop();
+    }
+  }
+
+  startCheckTimer() {
+    this.stopCheckTimer();
+    this.checkTimer = setTimeout(() => {
+      this.checkDropPosition();
+    }, this.checkTimeout);
+  }
+
+  stopCheckTimer() {
+    if (this.checkTimer) {
+      clearTimeout(this.checkTimer);
+      this.checkTimer = null;
+    }
+  }
+
   async pushPositionDoCommands(args?: PushDoCommandsArgs) {
+    this.pushPosition();
+
     if (!args || !args.commands || !Array.isArray(args.commands)) {
-      this.pushPosition();
       return;
     }
 
-    this.pushPosition();
+    this.checkTimeout = args.checkTimeout
+      ? args.checkTimeout
+      : this.defaultCheckTimeout;
+    this.startCheckTimer();
+
     for (let command of args.commands) {
       if (typeof command === "string") {
         await vscode.commands.executeCommand(command as string);
       } else {
         let argcmd = command as Command;
         await vscode.commands.executeCommand(argcmd.command, argcmd.args);
-      }
-    }
-    if (args.checkPosition && this.hasPushed) {
-      let position = this.positionStack.peek();
-      let editor = vscode.window.activeTextEditor;
-      if (!position || !editor) {
-        return;
-      }
-      if (position.isSamePosition(editor)) {
-        this.popPosition();
       }
     }
   }
@@ -176,8 +204,25 @@ export default class JumpStack {
       let oldLineNum = change.range.end.line - change.range.start.line + 1;
       let lineDiff = newLineNum - oldLineNum;
       this.positionStack.forEach((position) =>
-        position.fixPosition(doc.fileName, change.range, lineDiff)
+        position.fixPosition(doc.fileName, change.range, lineDiff),
       );
     });
+  }
+
+  checkPeekView(editors: readonly vscode.TextEditor[]) {
+    const lastEditor = editors[editors.length - 1];
+    const hasPeekView =
+      lastEditor?.document.uri.scheme === "file" &&
+      lastEditor?.viewColumn === undefined;
+
+    if (hasPeekView) {
+      this.stopCheckTimer();
+    }
+
+    if (!hasPeekView && this.wasPeekViewOpen && this.hasPushed) {
+      this.startCheckTimer();
+    }
+
+    this.wasPeekViewOpen = hasPeekView;
   }
 }

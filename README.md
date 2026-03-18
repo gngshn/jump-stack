@@ -18,7 +18,7 @@ This extension provides three commands:
 
 ## Shortcut config example
 
-The checkPosition option is used to discard the push action if cursor position is not change after the commands executing.
+The checkTimeout option is used to set the check delay time, default is 500(ms). VSCode has a delay when calling the language server to pop up a peek view and when switching from peek view to the final editor. You can use this option to configure the timeout of actual check of whether the new file position is the same as before. If it's the same position, the previously pushed position will be popped out. For example, after executing a command, if it jumps to the same position or the peek view is directly closed.
 
 ```json
 {
@@ -72,7 +72,7 @@ A more advanced config can be:
         }
       }
     ],
-    "checkPosition": true
+    "checkTimeout": 300
   }
 }
 ```
