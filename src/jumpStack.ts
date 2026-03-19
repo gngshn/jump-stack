@@ -44,6 +44,13 @@ class Stack<T> {
   }
 }
 
+interface PositionData {
+  filename: string;
+  viewColumn: vscode.ViewColumn;
+  line: number;
+  character: number;
+}
+
 class Position {
   private filename: string;
   private viewColumn: vscode.ViewColumn;
@@ -55,6 +62,23 @@ class Position {
       ? editor.viewColumn
       : vscode.ViewColumn.Active;
     this.cursor = editor.selection.active;
+  }
+
+  static fromData(data: PositionData): Position {
+    const position = Object.create(Position.prototype);
+    position.filename = data.filename;
+    position.viewColumn = data.viewColumn;
+    position.cursor = new vscode.Position(data.line, data.character);
+    return position;
+  }
+
+  toData(): PositionData {
+    return {
+      filename: this.filename,
+      viewColumn: this.viewColumn,
+      line: this.cursor.line,
+      character: this.cursor.character,
+    };
   }
 
   isSamePosition(editor: vscode.TextEditor | undefined): boolean {
@@ -120,6 +144,8 @@ class Position {
   }
 }
 
+const STORAGE_KEY = "jump-stack-positions";
+
 export default class JumpStack {
   private positionStack: Stack<Position>;
   private hasPushed: boolean = false;
@@ -127,10 +153,42 @@ export default class JumpStack {
   private checkTimer: NodeJS.Timeout | null = null;
   private checkTimeout: number;
   private defaultCheckTimeout: number = 500;
+  private storage: vscode.Memento | null = null;
 
   constructor() {
     this.positionStack = new Stack();
     this.checkTimeout = this.defaultCheckTimeout;
+  }
+
+  setStorage(storage: vscode.Memento) {
+    this.storage = storage;
+    this.restoreJumpStack();
+  }
+
+  private saveJumpStack() {
+    if (!this.storage) {
+      return;
+    }
+    const positions: PositionData[] = [];
+    this.positionStack.forEach((position) => {
+      positions.push(position.toData());
+    });
+    this.storage.update(STORAGE_KEY, positions);
+  }
+
+  private restoreJumpStack() {
+    if (!this.storage) {
+      return;
+    }
+    const positions = this.storage.get<PositionData[]>(STORAGE_KEY);
+    if (!positions || !Array.isArray(positions)) {
+      return;
+    }
+    this.positionStack = new Stack();
+    positions.forEach((data) => {
+      const position = Position.fromData(data);
+      this.positionStack.push(position);
+    });
   }
 
   pushPosition() {
@@ -143,12 +201,14 @@ export default class JumpStack {
     }
     this.stopCheckTimer();
     this.positionStack.push(new Position(editor));
+    this.saveJumpStack();
     this.hasPushed = true;
   }
 
   async popPosition() {
     this.stopCheckTimer();
     let position = this.positionStack.pop();
+    this.saveJumpStack();
     await position?.jump();
   }
 
@@ -158,6 +218,7 @@ export default class JumpStack {
 
     if (position?.isSamePosition(editor)) {
       this.positionStack.pop();
+      this.saveJumpStack();
     }
   }
 

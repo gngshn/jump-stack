@@ -5,6 +5,7 @@ let jumpStack: JumpStack;
 
 export function activate(context: vscode.ExtensionContext) {
   jumpStack = new JumpStack();
+  jumpStack.setStorage(context.workspaceState);
   context.subscriptions.push(
     vscode.commands.registerCommand("extension.jump-stack.pushPosition", () => {
       jumpStack.pushPosition();
