@@ -220,8 +220,8 @@ export default class JumpStack {
     if (position?.isSamePosition(editor)) {
       this.positionStack.pop();
       this.saveJumpStack();
-      this.needCheck = false;
     }
+    this.needCheck = false;
   }
 
   startCheckTimer() {
