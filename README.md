@@ -41,6 +41,7 @@ The checkTimeout option is used to set the check delay time, default is 500(ms).
   "key": "alt+d",
   "args": {
     "commands": ["editor.action.revealDefinition"]
+    "checkPosition": true
   }
 },
 {
@@ -72,6 +73,7 @@ A more advanced config can be:
         }
       }
     ],
+    "checkPosition": true
     "checkTimeout": 300
   }
 }
