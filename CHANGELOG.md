@@ -5,6 +5,12 @@ All notable changes to the "jump-stack" extension will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v3.0.1] - 2025-03-20
+
+## Fix
+
+- In some cases, when peek view is closed, it may incorrectly trigger the check timer to start
+
 ## [v3.0.0] - 2025-03-20
 
 ## Add
