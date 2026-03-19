@@ -147,37 +147,31 @@ class Position {
 
 const STORAGE_KEY = "jump-stack-positions";
 
-export default class JumpStack {
-  private positionStack: Stack<Position>;
-  private wasPeekViewOpen: boolean = false;
-  private needCheck: boolean = false;
-  private checkTimer: NodeJS.Timeout | null = null;
-  private checkTimeout: number;
-  private defaultCheckTimeout: number = 500;
+class PositionStack {
+  private stack: Stack<Position>;
   private storage: vscode.Memento | null = null;
 
   constructor() {
-    this.positionStack = new Stack();
-    this.checkTimeout = this.defaultCheckTimeout;
+    this.stack = new Stack();
   }
 
   setStorage(storage: vscode.Memento) {
     this.storage = storage;
-    this.restoreJumpStack();
+    this.load();
   }
 
-  private saveJumpStack() {
+  private save(): void {
     if (!this.storage) {
       return;
     }
     const positions: PositionData[] = [];
-    this.positionStack.forEach((position) => {
+    this.stack.forEach((position) => {
       positions.push(position.toData());
     });
     this.storage.update(STORAGE_KEY, positions);
   }
 
-  private restoreJumpStack() {
+  private load() {
     if (!this.storage) {
       return;
     }
@@ -185,11 +179,50 @@ export default class JumpStack {
     if (!positions || !Array.isArray(positions)) {
       return;
     }
-    this.positionStack = new Stack();
+    this.stack = new Stack();
     positions.forEach((data) => {
       const position = Position.fromData(data);
-      this.positionStack.push(position);
+      this.stack.push(position);
     });
+  }
+
+  push(position: Position) {
+    this.stack.push(position);
+    this.save();
+  }
+
+  pop(): Position | undefined {
+    const position = this.stack.pop();
+    this.save();
+    return position;
+  }
+
+  peek(): Position | undefined {
+    return this.stack.peek();
+  }
+
+  fixPosition(filename: string, range: vscode.Range, lineDiff: number) {
+    this.stack.forEach((position) =>
+      position.fixPosition(filename, range, lineDiff),
+    );
+  }
+}
+
+export default class JumpStack {
+  private positionStack: PositionStack;
+  private wasPeekViewOpen: boolean = false;
+  private needCheck: boolean = false;
+  private checkTimer: NodeJS.Timeout | null = null;
+  private checkTimeout: number;
+  private defaultCheckTimeout: number = 500;
+
+  constructor() {
+    this.positionStack = new PositionStack();
+    this.checkTimeout = this.defaultCheckTimeout;
+  }
+
+  setStorage(storage: vscode.Memento) {
+    this.positionStack.setStorage(storage);
   }
 
   pushPosition() {
@@ -202,24 +235,20 @@ export default class JumpStack {
     }
     this.stopCheckTimer();
     this.positionStack.push(new Position(editor));
-    this.saveJumpStack();
     this.needCheck = true;
   }
 
   async popPosition() {
     this.stopCheckTimer();
     let position = this.positionStack.pop();
-    this.saveJumpStack();
     await position?.jump();
   }
 
   checkDropPosition() {
-    let position = this.positionStack.peek();
     let editor = vscode.window.activeTextEditor;
-
+    let position = this.positionStack.peek();
     if (position?.isSamePosition(editor)) {
       this.positionStack.pop();
-      this.saveJumpStack();
     }
     this.needCheck = false;
   }
@@ -270,9 +299,7 @@ export default class JumpStack {
       let newLineNum = change.text.split("\n").length;
       let oldLineNum = change.range.end.line - change.range.start.line + 1;
       let lineDiff = newLineNum - oldLineNum;
-      this.positionStack.forEach((position) =>
-        position.fixPosition(doc.fileName, change.range, lineDiff),
-      );
+      this.positionStack.fixPosition(doc.fileName, change.range, lineDiff);
     });
   }
 
