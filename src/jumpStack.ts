@@ -13,6 +13,7 @@ interface Command {
 interface PushDoCommandsArgs {
   commands?: (string | Command)[];
   checkTimeout?: number;
+  checkPosition?: boolean;
 }
 
 class Stack<T> {
@@ -148,8 +149,8 @@ const STORAGE_KEY = "jump-stack-positions";
 
 export default class JumpStack {
   private positionStack: Stack<Position>;
-  private hasPushed: boolean = false;
   private wasPeekViewOpen: boolean = false;
+  private needCheck: boolean = false;
   private checkTimer: NodeJS.Timeout | null = null;
   private checkTimeout: number;
   private defaultCheckTimeout: number = 500;
@@ -196,13 +197,13 @@ export default class JumpStack {
     let position = this.positionStack.peek();
 
     if (!editor || position?.isSamePosition(editor)) {
-      this.hasPushed = false;
+      this.needCheck = false;
       return;
     }
     this.stopCheckTimer();
     this.positionStack.push(new Position(editor));
     this.saveJumpStack();
-    this.hasPushed = true;
+    this.needCheck = true;
   }
 
   async popPosition() {
@@ -219,6 +220,7 @@ export default class JumpStack {
     if (position?.isSamePosition(editor)) {
       this.positionStack.pop();
       this.saveJumpStack();
+      this.needCheck = false;
     }
   }
 
@@ -243,10 +245,14 @@ export default class JumpStack {
       return;
     }
 
-    this.checkTimeout = args.checkTimeout
-      ? args.checkTimeout
-      : this.defaultCheckTimeout;
-    this.startCheckTimer();
+    if (args.checkPosition) {
+      this.checkTimeout = args.checkTimeout
+        ? args.checkTimeout
+        : this.defaultCheckTimeout;
+      this.startCheckTimer();
+    } else {
+      this.needCheck = false;
+    }
 
     for (let command of args.commands) {
       if (typeof command === "string") {
@@ -280,7 +286,7 @@ export default class JumpStack {
       this.stopCheckTimer();
     }
 
-    if (!hasPeekView && this.wasPeekViewOpen && this.hasPushed) {
+    if (!hasPeekView && this.wasPeekViewOpen && this.needCheck) {
       this.startCheckTimer();
     }
 

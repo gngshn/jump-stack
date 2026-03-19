@@ -5,6 +5,12 @@ All notable changes to the "jump-stack" extension will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v3.0.0] - 2025-03-20
+
+## Add
+
+- Add checkPosition parameter to pushPositionDoCommands; starting timer to do position check will only be performed when checkPosition parameter exists, restoring the behavior from v1.x
+
 ## [v2.1.0] - 2025-03-20
 
 ### Add
