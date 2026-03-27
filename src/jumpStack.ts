@@ -93,6 +93,9 @@ class Position {
     ) {
       return false;
     }
+    if (this.cursor.isEqual(editor.selection.active)) {
+      return true;
+    }
     let range1 = document.getWordRangeAtPosition(this.cursor);
     let range2 = document.getWordRangeAtPosition(editor.selection.active);
     if (!range1 || !range2) {
